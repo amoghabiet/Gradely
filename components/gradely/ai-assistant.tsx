@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
+import { Output } from "@/lib/output-bus"
 
 type SuggestionApply =
   | { type: "replace"; range?: { startLine: number; endLine: number }; code: string }
@@ -25,6 +26,7 @@ type Suggestion = {
   title: string
   rationale?: string
   apply?: SuggestionApply
+  snippet?: string
 }
 
 type AssistantResponse = {
@@ -109,7 +111,25 @@ export function AIAssistant({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: trimmed, code, language }),
       })
-      const data: AssistantResponse = await res.json()
+      const data: AssistantResponse & { error?: string; info?: string } = await res.json().catch(() => ({}) as any)
+
+      if (!res.ok || data?.error) {
+        const detail = data?.error || "Assistant error"
+        Output.warning(detail)
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content: `${detail}. ${
+              detail.includes("HUGGINGFACE_OPEN_PERPLEXITY_URL")
+                ? "Set HUGGINGFACE_OPEN_PERPLEXITY_URL in Vars or rely on built-in heuristics."
+                : "Falling back to heuristics…"
+            }`,
+          },
+        ])
+        return
+      }
+
       const assistantText =
         data?.summary ||
         (data?.suggestions?.length
@@ -123,17 +143,38 @@ export function AIAssistant({
           suggestions: data?.suggestions || [],
         },
       ])
-    } catch (e: any) {
+      Output.ai(assistantText)
+    } catch {
       setMessages((m) => [
         ...m,
         { role: "assistant", content: "There was an error contacting the assistant. Please try again." },
       ])
+      Output.error("AI Assistant network error")
     } finally {
       setLoading(false)
     }
   }
 
   const applySuggestion = (s: Suggestion) => {
+    if (!s.apply && s.snippet) {
+      const current = editor.getCode()
+      const lines = current.split("\n")
+      const insertLine = Math.max(1, lines.length) // default to append at end
+      const next = current.replace(/\s*$/, "") + (current.endsWith("\n") ? "" : "\n") + s.snippet + "\n"
+
+      // Build a synthetic apply so the preview dialog shows proper diff context
+      const synthetic: Suggestion = {
+        ...s,
+        apply: {
+          type: "insert",
+          range: { startLine: insertLine },
+          code: s.snippet,
+        },
+      }
+      setPreview({ suggestion: synthetic, previewCode: next })
+      return
+    }
+
     if (!s.apply) return
     // Build preview prior to apply
     const current = editor.getCode()
@@ -229,18 +270,36 @@ export function AIAssistant({
                             </div>
                           ) : null}
                           <div className="mt-2 flex items-center gap-2">
-                            <Button size="sm" onClick={() => applySuggestion(s)}>
-                              Apply Suggestion
-                            </Button>
+                            {s.apply ? (
+                              <Button size="sm" onClick={() => applySuggestion(s)}>
+                                Apply Suggestion
+                              </Button>
+                            ) : s.snippet ? (
+                              <Button size="sm" onClick={() => applySuggestion(s)}>
+                                Insert Snippet
+                              </Button>
+                            ) : null}
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                if (!s.apply?.code) return
-                                navigator.clipboard.writeText(s.apply.code).catch(() => {})
+                                const toCopy = s.apply?.code ?? s.snippet
+                                if (!toCopy) return
+                                navigator.clipboard.writeText(toCopy).catch(() => {})
                               }}
                             >
                               Copy
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                Output.ai(s.title || "AI suggestion", {
+                                  codeSnippet: s.apply?.code ?? s.snippet ?? undefined,
+                                })
+                              }
+                            >
+                              Send to Output
                             </Button>
                           </div>
                         </div>

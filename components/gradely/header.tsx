@@ -29,6 +29,9 @@ export function GradelyHeader() {
           <span className="font-semibold">Gradely</span>
         </div>
         <nav className="flex items-center gap-2">
+          <Link href="/assignments" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Assignments
+          </Link>
           <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Docs
           </Link>

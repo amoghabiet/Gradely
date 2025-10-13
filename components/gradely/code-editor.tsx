@@ -15,10 +15,11 @@ export type EditorHandle = {
   revealLine: (line: number) => void
   addHighlights: (startLine: number, endLine?: number) => void
   clearHighlights: () => void
+  highlightRange?: (startLine: number, endLine?: number) => void
 }
 
 export function CodeEditor(props: {
-  language: "typescript" | "javascript" | "python" | "java"
+  language: "typescript" | "javascript" | "python" | "java" | "c" | "cpp" | "html" | "css"
   initialValue: string
   storageKey: string
   onMount?: (handle: EditorHandle) => void
@@ -92,6 +93,25 @@ export function CodeEditor(props: {
             decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [])
           }
         },
+        highlightRange: (startLine: number, endLine?: number) => {
+          const model = editor.getModel()
+          if (!model || !monaco) return
+          const start = Math.max(1, startLine)
+          const end = Math.max(start, endLine ?? start)
+          if (decorationsRef.current.length) {
+            decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [])
+          }
+          decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
+            {
+              range: new monaco.Range(start, 1, end, 1),
+              options: {
+                isWholeLine: true,
+                className: "gradely-line-highlight",
+                marginClassName: "gradely-line-highlight-margin",
+              },
+            },
+          ])
+        },
       })
 
       // Save on change
@@ -121,13 +141,19 @@ export function CodeEditor(props: {
         ? "javascript"
         : props.language === "python"
           ? "python"
-          : "java"
+          : props.language === "java"
+            ? "java"
+            : props.language === "cpp" || props.language === "c"
+              ? "cpp"
+              : props.language === "html"
+                ? "html"
+                : "css"
 
   return (
     <div className="rounded-xl border overflow-hidden glass-surface">
       <Editor
         height="60vh"
-        defaultLanguage={monacoLang}
+        language={monacoLang}
         defaultValue={props.initialValue}
         theme="light"
         options={{

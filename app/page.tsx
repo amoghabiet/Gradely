@@ -10,8 +10,10 @@ import { ReviewPanel, type ReviewIssue, type ReviewResult } from "@/components/g
 import { HistoryPanel, type Snapshot } from "@/components/gradely/history-panel"
 import { GradelyHeader } from "@/components/gradely/header"
 import { AIAssistant } from "@/components/gradely/ai-assistant"
+import { OutputWindow } from "@/components/gradely/output-window"
+import { Output } from "@/lib/output-bus" // wire Output bus for visible logs
 
-type Lang = "typescript" | "javascript" | "python" | "java"
+type Lang = "typescript" | "javascript" | "python" | "java" | "c" | "cpp" | "html" | "css"
 
 const DEFAULT_CODE: Record<Lang, string> = {
   typescript: `// Welcome to Gradely!
@@ -51,6 +53,42 @@ public class Main {
     System.out.println(add(2, 3));
   }
 }
+`,
+  c: `// Welcome to Gradely!
+// Write C here and click "Analyze Code" for instant AI feedback.
+#include <stdio.h>
+
+int add(int a, int b) { return a + b; }
+
+int main() {
+  printf("%d\\n", add(2, 3));
+  return 0;
+}
+`,
+  cpp: `// Welcome to Gradely!
+// Write C++ here and click "Analyze Code" for instant AI feedback.
+#include <iostream>
+int add(int a, int b) { return a + b; }
+int main() {
+  std::cout << add(2, 3) << std::endl;
+  return 0;
+}
+`,
+  html: ` Welcome to Gradely! 
+ Write HTML here and click "Analyze Code" for instant AI feedback. 
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Gradely HTML</title></head>
+  <body>
+    <h1>Hello</h1>
+    <p>Try editing this markup.</p>
+  </body>
+</html>
+`,
+  css: `/* Welcome to Gradely! */
+/* Write CSS here and click "Analyze Code" for instant AI feedback. */
+:root { --brand: #0ea5e9; }
+h1 { color: var(--brand); font-weight: 700; }
 `,
 }
 
@@ -96,6 +134,7 @@ export default function HomePage() {
 
   const handleAnalyze = useCallback(async () => {
     const code = editorRef.current?.getValue() ?? ""
+    Output.info("Analyzing code with AI review…", { codeSnippet: code.slice(0, 400), meta: { language } })
     setLoading(true)
     setReview(null)
     setIssues([])
@@ -108,10 +147,22 @@ export default function HomePage() {
       const data: ReviewResult = await res.json()
       setReview(data)
       setIssues(data.issues ?? [])
-      // Push markers into editor
       editorRef.current?.setMarkers(data.issues ?? [])
+
+      const count = data.issues?.length ?? 0
+      Output.success(`AI Review complete — ${count} issue${count === 1 ? "" : "s"} found.`)
+      if (count === 0) {
+        Output.info("No issues detected. Try a different prompt or language settings.")
+      } else {
+        for (const it of data.issues!) {
+          const line = Math.max(1, it.line || 1)
+          const msg = `${it.severity?.toUpperCase?.() || "ISSUE"} at line ${line}: ${it.message}`
+          if (it.severity === "error") Output.error(msg, { line })
+          else if (it.severity === "warning") Output.warning(msg, { line })
+          else Output.info(msg, { line })
+        }
+      }
     } catch (err) {
-      // Minimal user feedback; could add toast later
       console.error("[v0] Review error:", err)
       setReview({
         summary: "Something went wrong while analyzing your code. Please try again.",
@@ -119,6 +170,7 @@ export default function HomePage() {
       })
       setIssues([])
       editorRef.current?.setMarkers([])
+      Output.error("AI Review failed. Please retry or adjust your code.")
     } finally {
       setLoading(false)
     }
@@ -137,11 +189,12 @@ export default function HomePage() {
     const existing: Snapshot[] = existingRaw ? JSON.parse(existingRaw) : []
     const next = [newSnap, ...existing].slice(0, 50) // cap history
     window.localStorage.setItem(snapshotsKey, JSON.stringify(next))
+    Output.success("Snapshot saved.", { meta: { language } })
   }, [language, snapshotsKey])
 
   const handleLoadSnapshot = useCallback((snap: Snapshot) => {
     setLanguage(snap.language as Lang)
-    // Give language switch a tick, then set value to editor
+    Output.info(`Loaded snapshot (${snap.language}).`)
     setTimeout(() => {
       editorRef.current?.setValue(snap.code)
     }, 0)
@@ -152,6 +205,7 @@ export default function HomePage() {
     setReview(null)
     setIssues([])
     editorRef.current?.setMarkers([])
+    Output.info("Editor cleared and markers removed.")
   }, [])
 
   const editorBridge = useMemo(
@@ -199,6 +253,10 @@ export default function HomePage() {
                   <SelectItem value="javascript">JavaScript</SelectItem>
                   <SelectItem value="python">Python</SelectItem>
                   <SelectItem value="java">Java</SelectItem>
+                  <SelectItem value="c">C</SelectItem>
+                  <SelectItem value="cpp">C++</SelectItem>
+                  <SelectItem value="html">HTML</SelectItem>
+                  <SelectItem value="css">CSS</SelectItem>
                 </SelectContent>
               </Select>
               <div className="text-sm text-muted-foreground hidden md:block">Write code and get instant AI review</div>
@@ -251,6 +309,9 @@ export default function HomePage() {
           </div>
         </Card>
 
+        {/* Bottom output window, resizable and non-blocking */}
+        <OutputWindow onJumpToLine={(line) => editorRef.current?.revealLine(line)} />
+
         <HistoryPanel storageKey={snapshotsKey} onLoad={handleLoadSnapshot} />
       </section>
 
@@ -268,7 +329,7 @@ export default function HomePage() {
           <div className="mx-auto w-full max-w-7xl glass-surface rounded-xl p-6 reveal">
             <h2 className="text-lg font-semibold">Multi-language support</h2>
             <p className="text-sm text-muted-foreground mt-2">
-              TypeScript, JavaScript, Python, and Java—switch instantly with one selector.
+              TypeScript, JavaScript, Python, Java, C, C++, HTML, and CSS—switch instantly with one selector.
             </p>
           </div>
         </div>

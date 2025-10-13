@@ -33,6 +33,25 @@
   /* Glass surface helper */
   --glass-surface: rgba(255, 255, 255, 0.7);
   --glass-border: rgba(255, 255, 255, 0.4);
+
+  /* Panel and text helpers used by OutputWindow */
+  --panel-bg: var(--card);
+  --panel-contrast: color-mix(in oklab, var(--card) 90%, var(--muted) 10%);
+  --border-muted: color-mix(in oklab, var(--border) 85%, transparent 15%);
+  --fg-muted: var(--muted-foreground);
+  --fg-strong: var(--foreground);
+
+  /* Output kinds */
+  --info-bg: color-mix(in oklab, var(--accent) 14%, white 86%);
+  --info-fg: var(--foreground);
+  --warn-bg: color-mix(in oklab, var(--accent) 8%, #ffe6bf 92%);
+  --warn-fg: oklch(0.35 0.05 70);
+  --error-bg: color-mix(in oklab, #ff4d4f 16%, white 84%);
+  --error-fg: oklch(0.35 0.1 30);
+  --success-bg: color-mix(in oklab, #3cb371 16%, white 84%);
+  --success-fg: oklch(0.35 0.05 150);
+  --ai-bg: color-mix(in oklab, var(--accent) 18%, white 82%);
+  --ai-fg: var(--foreground);
 }
 
 .dark {
@@ -68,6 +87,23 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
+
+  --panel-bg: var(--card);
+  --panel-contrast: color-mix(in oklab, var(--card) 88%, var(--muted) 12%);
+  --border-muted: color-mix(in oklab, var(--border) 70%, transparent 30%);
+  --fg-muted: var(--muted-foreground);
+  --fg-strong: var(--foreground);
+
+  --info-bg: color-mix(in oklab, var(--accent) 20%, black 80%);
+  --info-fg: var(--foreground);
+  --warn-bg: color-mix(in oklab, #a66d00 25%, black 75%);
+  --warn-fg: oklch(0.9 0 0);
+  --error-bg: color-mix(in oklab, #ff4d4f 28%, black 72%);
+  --error-fg: oklch(0.98 0 0);
+  --success-bg: color-mix(in oklab, #2e8b57 28%, black 72%);
+  --success-fg: oklch(0.98 0 0);
+  --ai-bg: color-mix(in oklab, var(--accent) 26%, black 74%);
+  --ai-fg: oklch(0.98 0 0);
 }
 
 @theme inline {
@@ -131,6 +167,20 @@
   .glass-button {
     @apply bg-accent text-accent-foreground hover:opacity-90 transition;
   }
+
+  /* lightweight muted button for Output window actions */
+  .btn-muted {
+    border: 1px solid var(--border-muted);
+    background-color: var(--panel-contrast);
+    color: var(--fg-strong);
+    padding: 0.25rem 0.5rem; /* px-2 py-1 */
+    font-size: 0.75rem; /* text-xs */
+    border-radius: 0.375rem; /* rounded-md */
+    transition: opacity 150ms ease;
+  }
+  .btn-muted:hover {
+    opacity: 0.9;
+  }
 }
 
 /* Reveal on scroll */
@@ -172,6 +222,20 @@
   }
   .gradely-line-highlight-margin {
     border-left: 3px solid var(--accent);
+  }
+
+  @keyframes output-fade {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .animate-output-fade {
+    animation: output-fade 0.3s ease-out both;
   }
 }
 
