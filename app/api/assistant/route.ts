@@ -1,8 +1,37 @@
-export async function POST(req: Request) {
+import { validateRequest, AssistantRequestSchema } from "@/lib/validation"
+import { rateLimit } from "@/lib/rate-limit"
+import { logger } from "@/lib/logger"
+import type { NextRequest } from "next/server"
+
+export async function POST(req: NextRequest) {
+  const startTime = Date.now()
+  const clientIp = req.headers.get("x-forwarded-for") || "unknown"
+
+  const rateLimitResult = rateLimit(`assistant:${clientIp}`, 15, 60000)
+  if (!rateLimitResult.allowed) {
+    logger.warn("Rate limit exceeded", { endpoint: "/api/assistant", clientIp })
+    return Response.json(
+      { error: "Too many requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": "60" } },
+    )
+  }
+
   const abort = new AbortController()
-  const to = setTimeout(() => abort.abort("timeout"), 20000)
+  const timeout = setTimeout(() => abort.abort(), 25000)
+
   try {
-    const { prompt, code = "", language = "plaintext" } = await req.json()
+    const body = await req.json().catch(() => ({}))
+
+    const validation = validateRequest(AssistantRequestSchema, body)
+    if (!validation.valid) {
+      logger.warn("Invalid assistant request", { error: validation.error, clientIp })
+      clearTimeout(timeout)
+      return Response.json({ error: `Invalid input: ${validation.error}` }, { status: 400 })
+    }
+
+    const { prompt, code, language } = validation.data
+    logger.logRequest(req, { endpoint: "/api/assistant", promptLength: prompt.length, language })
+
     const sys = [
       "You are an expert IDE-integrated code assistant.",
       "Always return a JSON object that matches this shape:",
@@ -21,7 +50,7 @@ export async function POST(req: Request) {
       "Do not include prose outside JSON.",
     ].join("\n")
 
-    // Special-case: tiny utility requests like “simple addition code using python only”
+    // Special-case: tiny utility requests like "simple addition code using python only"
     const lower = String(prompt || "").toLowerCase()
     if (
       !code &&
@@ -48,7 +77,7 @@ export async function POST(req: Request) {
         ],
         highlights: [],
       }
-      clearTimeout(to)
+      clearTimeout(timeout)
       return Response.json(payload, { status: 200 })
     }
 
@@ -125,7 +154,7 @@ export async function POST(req: Request) {
 
     const normalized = safe(parsed)
     if (normalized && (normalized.suggestions.length > 0 || normalized.highlights.length > 0)) {
-      clearTimeout(to)
+      clearTimeout(timeout)
       return Response.json(normalized, { status: 200 })
     }
 
@@ -180,25 +209,17 @@ export async function POST(req: Request) {
       highlights: [],
     }
 
-    clearTimeout(to)
+    clearTimeout(timeout)
     return Response.json(fallbackPayload, { status: 200 })
   } catch (err: any) {
-    clearTimeout(to)
-    return Response.json(
-      {
-        summary: "Assistant request failed, but the editor remains usable.",
-        suggestions: [
-          {
-            title: "Request failed",
-            description: `Error: ${err?.message || "Unknown error"}. Try again or simplify your request.`,
-            line: null,
-            apply: null,
-            snippet: null,
-          },
-        ],
-        highlights: [],
-      },
-      { status: 200 },
-    )
+    const duration = Date.now() - startTime
+    logger.error("Assistant endpoint error", {
+      error: err?.message,
+      endpoint: "/api/assistant",
+      duration,
+      clientIp,
+    })
+    clearTimeout(timeout)
+    return Response.json({ error: "Assistant request failed. Please try again." }, { status: 500 })
   }
 }

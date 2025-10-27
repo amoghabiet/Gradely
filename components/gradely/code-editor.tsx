@@ -2,11 +2,21 @@
 
 "use client"
 
-import Editor, { type OnMount } from "@monaco-editor/react"
-import { useCallback, useEffect, useRef } from "react"
+import Editor, { type OnMount, loader } from "@monaco-editor/react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type * as Monaco from "monaco-editor"
 import { useDebouncedCallback } from "use-debounce"
 import type { ReviewIssue } from "./review-panel"
+
+try {
+  loader.config({
+    paths: {
+      vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs",
+    },
+  })
+} catch (e) {
+  console.warn("[v0] Monaco loader config failed:", e)
+}
 
 export type EditorHandle = {
   getValue: () => string
@@ -28,6 +38,7 @@ export function CodeEditor(props: {
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof Monaco | null>(null)
   const decorationsRef = useRef<string[]>([]) // track highlight decorations
+  const [initError, setInitError] = useState<string | null>(null)
 
   const save = useDebouncedCallback((val: string) => {
     try {
@@ -37,89 +48,96 @@ export function CodeEditor(props: {
 
   const onMount: OnMount = useCallback(
     (editor, monaco) => {
-      editorRef.current = editor
-      monacoRef.current = monaco
+      try {
+        editorRef.current = editor
+        monacoRef.current = monaco
 
-      // Provide an imperative API to parent
-      props.onMount?.({
-        getValue: () => editor.getValue(),
-        setValue: (code) => editor.setValue(code),
-        revealLine: (line) => {
-          editor.revealLineInCenter(line)
-          editor.setPosition({ lineNumber: line, column: 1 })
-          editor.focus()
-        },
-        setMarkers: (issues) => {
-          const model = editor.getModel()
-          if (!model) return
-          const markers: Monaco.editor.IMarkerData[] = (issues || []).map((it) => ({
-            startLineNumber: Math.max(1, it.line || 1),
-            endLineNumber: Math.max(1, it.line || 1),
-            startColumn: 1,
-            endColumn: 120,
-            message: it.message,
-            severity:
-              it.severity === "error"
-                ? monaco.MarkerSeverity.Error
-                : it.severity === "warning"
-                  ? monaco.MarkerSeverity.Warning
-                  : monaco.MarkerSeverity.Info,
-            source: "Gradely",
-          }))
-          monaco.editor.setModelMarkers(model, "gradely", markers)
-        },
-        addHighlights: (startLine: number, endLine?: number) => {
-          const model = editor.getModel()
-          if (!model || !monaco) return
-          const start = Math.max(1, startLine)
-          const end = Math.max(start, endLine ?? start)
-          // Remove previous first
-          if (decorationsRef.current.length) {
-            decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [])
-          }
-          decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
-            {
-              range: new monaco.Range(start, 1, end, 1),
-              options: {
-                isWholeLine: true,
-                className: "gradely-line-highlight",
-                marginClassName: "gradely-line-highlight-margin",
+        // Provide an imperative API to parent
+        props.onMount?.({
+          getValue: () => editor.getValue(),
+          setValue: (code) => editor.setValue(code),
+          revealLine: (line) => {
+            editor.revealLineInCenter(line)
+            editor.setPosition({ lineNumber: line, column: 1 })
+            editor.focus()
+          },
+          setMarkers: (issues) => {
+            const model = editor.getModel()
+            if (!model) return
+            const markers: Monaco.editor.IMarkerData[] = (issues || []).map((it) => ({
+              startLineNumber: Math.max(1, it.line || 1),
+              endLineNumber: Math.max(1, it.line || 1),
+              startColumn: 1,
+              endColumn: 120,
+              message: it.message,
+              severity:
+                it.severity === "error"
+                  ? monaco.MarkerSeverity.Error
+                  : it.severity === "warning"
+                    ? monaco.MarkerSeverity.Warning
+                    : monaco.MarkerSeverity.Info,
+              source: "Gradely",
+            }))
+            monaco.editor.setModelMarkers(model, "gradely", markers)
+          },
+          addHighlights: (startLine: number, endLine?: number) => {
+            const model = editor.getModel()
+            if (!model || !monaco) return
+            const start = Math.max(1, startLine)
+            const end = Math.max(start, endLine ?? start)
+            // Remove previous first
+            if (decorationsRef.current.length) {
+              decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [])
+            }
+            decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
+              {
+                range: new monaco.Range(start, 1, end, 1),
+                options: {
+                  isWholeLine: true,
+                  className: "gradely-line-highlight",
+                  marginClassName: "gradely-line-highlight-margin",
+                },
               },
-            },
-          ])
-        },
-        clearHighlights: () => {
-          if (editor && decorationsRef.current.length) {
-            decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [])
-          }
-        },
-        highlightRange: (startLine: number, endLine?: number) => {
-          const model = editor.getModel()
-          if (!model || !monaco) return
-          const start = Math.max(1, startLine)
-          const end = Math.max(start, endLine ?? start)
-          if (decorationsRef.current.length) {
-            decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [])
-          }
-          decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
-            {
-              range: new monaco.Range(start, 1, end, 1),
-              options: {
-                isWholeLine: true,
-                className: "gradely-line-highlight",
-                marginClassName: "gradely-line-highlight-margin",
+            ])
+          },
+          clearHighlights: () => {
+            if (editor && decorationsRef.current.length) {
+              decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [])
+            }
+          },
+          highlightRange: (startLine: number, endLine?: number) => {
+            const model = editor.getModel()
+            if (!model || !monaco) return
+            const start = Math.max(1, startLine)
+            const end = Math.max(start, endLine ?? start)
+            if (decorationsRef.current.length) {
+              decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [])
+            }
+            decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
+              {
+                range: new monaco.Range(start, 1, end, 1),
+                options: {
+                  isWholeLine: true,
+                  className: "gradely-line-highlight",
+                  marginClassName: "gradely-line-highlight-margin",
+                },
               },
-            },
-          ])
-        },
-      })
+            ])
+          },
+        })
 
-      // Save on change
-      editor.onDidChangeModelContent(() => {
-        const val = editor.getValue()
-        save(val)
-        props.onChange?.(val)
-      })
+        // Save on change
+        editor.onDidChangeModelContent(() => {
+          const val = editor.getValue()
+          save(val)
+          props.onChange?.(val)
+        })
+
+        setInitError(null)
+      } catch (e) {
+        console.error("[v0] Monaco onMount error:", e)
+        setInitError("Failed to initialize editor. Please refresh the page.")
+      }
     },
     [props, save],
   )
@@ -149,6 +167,22 @@ export function CodeEditor(props: {
                 ? "html"
                 : "css"
 
+  if (initError) {
+    return (
+      <div className="rounded-xl border overflow-hidden glass-surface p-6 flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <div className="text-center">
+          <p className="text-sm text-red-600 font-medium">{initError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-xl border overflow-hidden glass-surface">
       <Editor
@@ -164,6 +198,10 @@ export function CodeEditor(props: {
           scrollBeyondLastLine: false,
         }}
         onMount={onMount}
+        onError={(error) => {
+          console.error("[v0] Monaco error:", error)
+          setInitError("Editor failed to load. Please try refreshing.")
+        }}
       />
     </div>
   )

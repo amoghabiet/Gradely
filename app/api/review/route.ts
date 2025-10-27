@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateText } from "ai"
+import { validateRequest, ReviewRequestSchema } from "@/lib/validation"
+import { rateLimit } from "@/lib/rate-limit"
+import { logger } from "@/lib/logger"
 
 type ReviewIssue = {
   line: number
@@ -52,14 +55,29 @@ function heuristicAnalyze(code: string, language: string): { summary: string; is
 }
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now()
+  const clientIp = req.headers.get("x-forwarded-for") || "unknown"
+
+  const rateLimitResult = rateLimit(`review:${clientIp}`, 20, 60000)
+  if (!rateLimitResult.allowed) {
+    logger.warn("Rate limit exceeded", { endpoint: "/api/review", clientIp })
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": "60" } },
+    )
+  }
+
   try {
-    const { code, language } = await req.json()
-    if (typeof code !== "string" || !code.trim()) {
-      return NextResponse.json<ReviewResult>({
-        summary: "No code provided.",
-        issues: [],
-      })
+    const body = await req.json().catch(() => ({}))
+
+    const validation = validateRequest(ReviewRequestSchema, body)
+    if (!validation.valid) {
+      logger.warn("Invalid review request", { error: validation.error, clientIp })
+      return NextResponse.json({ error: `Invalid input: ${validation.error}` }, { status: 400 })
     }
+
+    const { code, language } = validation.data
+    logger.logRequest(req, { endpoint: "/api/review", codeLength: code.length, language })
 
     // Prompt the model to return a compact JSON payload
     const prompt = `
@@ -128,14 +146,13 @@ ${code}
     }
     return NextResponse.json(result)
   } catch (err: any) {
-    const body = await req.json().catch(() => ({}) as any)
-    const fallback = heuristicAnalyze(String(body?.code || ""), String(body?.language || ""))
-    return NextResponse.json<ReviewResult>(
-      {
-        summary: fallback.summary,
-        issues: fallback.issues,
-      },
-      { headers: { "Cache-Control": "no-store" } },
-    )
+    const duration = Date.now() - startTime
+    logger.error("Review endpoint error", {
+      error: err?.message,
+      endpoint: "/api/review",
+      duration,
+      clientIp,
+    })
+    return NextResponse.json({ error: "Failed to analyze code. Please try again." }, { status: 500 })
   }
 }

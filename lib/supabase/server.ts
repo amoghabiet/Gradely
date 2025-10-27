@@ -3,9 +3,9 @@ import { createServerClient } from "@supabase/ssr"
 
 let client: ReturnType<typeof createServerClient> | null = null
 
-export function getServerSupabase() {
-  const c = cookies()
-  const h = headers()
+export async function getServerSupabase() {
+  const c = await cookies()
+  const h = await headers()
   if (client) return client
   client = createServerClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
     cookies: {
@@ -21,7 +21,7 @@ export function getServerSupabase() {
 }
 
 export async function getCurrentUserAndRole() {
-  const supabase = getServerSupabase()
+  const supabase = await getServerSupabase()
   const {
     data: { user },
   } = await supabase.auth.getUser()

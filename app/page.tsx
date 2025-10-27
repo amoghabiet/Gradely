@@ -12,6 +12,7 @@ import { GradelyHeader } from "@/components/gradely/header"
 import { AIAssistant } from "@/components/gradely/ai-assistant"
 import { OutputWindow } from "@/components/gradely/output-window"
 import { Output } from "@/lib/output-bus" // wire Output bus for visible logs
+import { ErrorBoundary } from "@/components/error-boundary"
 
 type Lang = "typescript" | "javascript" | "python" | "java" | "c" | "cpp" | "html" | "css"
 
@@ -240,79 +241,86 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto w-full max-w-7xl px-4 py-6 md:py-8 flex-1 flex flex-col gap-4">
-        <Card className="p-4 md:p-6 glass-surface reveal">
-          {/* Toolbar row */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <Select value={language} onValueChange={(v) => setLanguage(v as Lang)}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Language" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="typescript">TypeScript</SelectItem>
-                  <SelectItem value="javascript">JavaScript</SelectItem>
-                  <SelectItem value="python">Python</SelectItem>
-                  <SelectItem value="java">Java</SelectItem>
-                  <SelectItem value="c">C</SelectItem>
-                  <SelectItem value="cpp">C++</SelectItem>
-                  <SelectItem value="html">HTML</SelectItem>
-                  <SelectItem value="css">CSS</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="text-sm text-muted-foreground hidden md:block">Write code and get instant AI review</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setAssistantOpen((v) => !v)}>
-                {assistantOpen ? "Hide AI Assistant" : "AI Assistant"}
-              </Button>
-              <Button variant="secondary" onClick={handleSaveSnapshot}>
-                Save Snapshot
-              </Button>
-              <Button variant="outline" onClick={handleClear}>
-                Clear
-              </Button>
-              <Button onClick={handleAnalyze} disabled={loading}>
-                {loading ? "Analyzing…" : "Analyze Code"}
-              </Button>
-            </div>
-          </div>
-
-          {/* Main work area */}
-          <div
-            className={cn(
-              "mt-4 grid gap-4",
-              assistantOpen ? "grid-cols-1 lg:grid-cols-4" : "grid-cols-1 lg:grid-cols-3",
-            )}
-          >
-            <div className={cn(assistantOpen ? "lg:col-span-2" : "lg:col-span-2")}>
-              <CodeEditor
-                key={language}
-                language={language}
-                initialValue={initialCode}
-                onMount={onMountEditor}
-                storageKey={`gradely:code:${language}`}
-                onChange={setLiveCode} // live awareness (optional)
-              />
-            </div>
-            <div className="lg:col-span-1">
-              <ReviewPanel
-                review={review}
-                issues={issues}
-                onJumpToLine={(line) => editorRef.current?.revealLine(line)}
-              />
-            </div>
-            {assistantOpen && (
-              <div className="lg:col-span-1">
-                <AIAssistant open={assistantOpen} onOpenChange={setAssistantOpen} editor={editorBridge} />
+        <ErrorBoundary>
+          <Card className="p-4 md:p-6 glass-surface reveal">
+            {/* Toolbar row */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Select value={language} onValueChange={(v) => setLanguage(v as Lang)}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="typescript">TypeScript</SelectItem>
+                    <SelectItem value="javascript">JavaScript</SelectItem>
+                    <SelectItem value="python">Python</SelectItem>
+                    <SelectItem value="java">Java</SelectItem>
+                    <SelectItem value="c">C</SelectItem>
+                    <SelectItem value="cpp">C++</SelectItem>
+                    <SelectItem value="html">HTML</SelectItem>
+                    <SelectItem value="css">CSS</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="text-sm text-muted-foreground hidden md:block">
+                  Write code and get instant AI review
+                </div>
               </div>
-            )}
-          </div>
-        </Card>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setAssistantOpen((v) => !v)}>
+                  {assistantOpen ? "Hide AI Assistant" : "AI Assistant"}
+                </Button>
+                <Button variant="secondary" onClick={handleSaveSnapshot}>
+                  Save Snapshot
+                </Button>
+                <Button variant="outline" onClick={handleClear}>
+                  Clear
+                </Button>
+                <Button onClick={handleAnalyze} disabled={loading}>
+                  {loading ? "Analyzing…" : "Analyze Code"}
+                </Button>
+              </div>
+            </div>
 
-        {/* Bottom output window, resizable and non-blocking */}
-        <OutputWindow onJumpToLine={(line) => editorRef.current?.revealLine(line)} />
+            {/* Main work area */}
+            <div
+              className={cn(
+                "mt-4 grid gap-4",
+                assistantOpen ? "grid-cols-1 lg:grid-cols-4" : "grid-cols-1 lg:grid-cols-3",
+              )}
+            >
+              <div className={cn(assistantOpen ? "lg:col-span-2" : "lg:col-span-2")}>
+                <CodeEditor
+                  key={language}
+                  language={language}
+                  initialValue={initialCode}
+                  onMount={onMountEditor}
+                  storageKey={`gradely:code:${language}`}
+                  onChange={setLiveCode} // live awareness (optional)
+                />
+              </div>
+              <div className="lg:col-span-1">
+                <ReviewPanel
+                  review={review}
+                  issues={issues}
+                  onJumpToLine={(line) => editorRef.current?.revealLine(line)}
+                />
+              </div>
+              {assistantOpen && (
+                <div className="lg:col-span-1">
+                  <AIAssistant open={assistantOpen} onOpenChange={setAssistantOpen} editor={editorBridge} />
+                </div>
+              )}
+            </div>
+          </Card>
+        </ErrorBoundary>
 
-        <HistoryPanel storageKey={snapshotsKey} onLoad={handleLoadSnapshot} />
+        <ErrorBoundary>
+          <OutputWindow onJumpToLine={(line) => editorRef.current?.revealLine(line)} />
+        </ErrorBoundary>
+
+        <ErrorBoundary>
+          <HistoryPanel storageKey={snapshotsKey} onLoad={handleLoadSnapshot} />
+        </ErrorBoundary>
       </section>
 
       {/* Snap-scrolling features strip */}
